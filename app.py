@@ -13,7 +13,7 @@ if creds:
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-MODEL_NAME = "publishers/anthropic/models/claude-sonnet-4-5"
+MODEL_NAME = "publishers/anthropic/models/claude-sonnet-4-6"
 
 st.set_page_config(page_title="Claude AI Chat", page_icon="🤖")
 st.title("Claude AI Chat")
