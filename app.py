@@ -1,12 +1,12 @@
 import os
 import streamlit as st
-import anthropic
+from google import genai
 
-client = anthropic.Anthropic(
-    api_key=os.getenv("ANTHROPIC_API_KEY")
+client = genai.Client(
+    api_key=os.getenv("GOOGLE_API_KEY")
 )
 
-st.title("Claude AI Chat")
+st.title("Claude Chat")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -18,18 +18,15 @@ for m in st.session_state.messages:
 user_input = st.chat_input("Ask something")
 
 if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    st.session_state.messages.append({"role":"user","content":user_input})
 
     with st.chat_message("assistant"):
-        response = client.messages.create(
-            model="claude-3-5-sonnet-latest",
-            max_tokens=1000,
-            messages=[
-                {"role": "user", "content": user_input}
-            ],
+        response = client.models.generate_content(
+            model="claude-sonnet-4-5@20250929",
+            contents=user_input
         )
 
-        reply = response.content[0].text
+        reply = response.text
         st.markdown(reply)
 
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+    st.session_state.messages.append({"role":"assistant","content":reply})
