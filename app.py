@@ -1,9 +1,9 @@
 import os
 import tempfile
 import streamlit as st
-from google import genai
+from anthropic import AnthropicVertex
 
-# ===== Google Cloud credentials from Railway Variables =====
+# 读取 Railway Variables 里的服务账号 JSON
 creds = os.getenv("GOOGLE_CREDENTIALS")
 if creds:
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
@@ -12,33 +12,30 @@ if creds:
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-MODEL_NAME = "publishers/anthropic/models/claude-sonnet-4-6@default"
+
+# Claude on Vertex AI 官方文档示例使用区域端点。
+# 先别用 global，先用一个明确支持 Claude 的区域。
+REGION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-east5")
+
+MODEL_NAME = "claude-sonnet-4-6"
 
 st.set_page_config(page_title="Claude AI Chat", page_icon="🤖")
 st.title("🤖 Claude AI Chat")
-st.caption("ECNU 实用人工智能课程项目 · Railway + Vertex AI + Claude Sonnet 4.6")
+st.caption("Railway + Vertex AI + Claude Sonnet 4.6")
 
 if not PROJECT_ID:
-    st.error("没有检测到 GOOGLE_CLOUD_PROJECT，请先在 Railway Variables 里配置。")
+    st.error("没有检测到 GOOGLE_CLOUD_PROJECT。")
     st.stop()
 
-# ===== Initialize Vertex AI client =====
 try:
-    client = genai.Client(
-        vertexai=True,
-        project=PROJECT_ID,
-        location=LOCATION,
-    )
+    client = AnthropicVertex(project_id=PROJECT_ID, region=REGION)
 except Exception as e:
-    st.error(f"Vertex AI 客户端初始化失败：{e}")
+    st.error(f"Claude Vertex 客户端初始化失败：{e}")
     st.stop()
 
-# ===== Session state =====
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ===== Sidebar =====
 with st.sidebar:
     st.header("参数设置")
     system_prompt = st.text_area(
@@ -46,16 +43,17 @@ with st.sidebar:
         value="你是一个简洁、准确、乐于助人的 AI 助手。",
         height=120,
     )
+    max_tokens = st.slider("Max tokens", 128, 2048, 800, 64)
+    temperature = st.slider("Temperature", 0.0, 1.0, 0.3, 0.1)
+
     if st.button("清空对话"):
         st.session_state.messages = []
         st.rerun()
 
-# ===== Display history =====
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# ===== User input =====
 user_input = st.chat_input("请输入你的问题")
 
 if user_input:
@@ -67,19 +65,27 @@ if user_input:
     with st.chat_message("assistant"):
         with st.spinner("Claude 思考中..."):
             try:
-                # Build a simple conversation context
-                conversation_text = system_prompt + "\n\n"
-                for msg in st.session_state.messages:
-                    role_name = "用户" if msg["role"] == "user" else "助手"
-                    conversation_text += f"{role_name}: {msg['content']}\n"
-                conversation_text += "助手:"
+                api_messages = [
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.messages
+                ]
 
-                response = client.models.generate_content(
+                response = client.messages.create(
                     model=MODEL_NAME,
-                    contents=conversation_text,
+                    system=system_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    messages=api_messages,
                 )
 
-                reply = response.text if hasattr(response, "text") else str(response)
+                reply = "".join(
+                    block.text for block in response.content
+                    if getattr(block, "type", None) == "text"
+                ).strip()
+
+                if not reply:
+                    reply = "模型没有返回可显示的文本内容。"
+
                 st.markdown(reply)
 
             except Exception as e:
