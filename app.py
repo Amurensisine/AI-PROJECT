@@ -2,7 +2,8 @@ import os
 import tempfile
 import streamlit as st
 from anthropic import AnthropicVertex
-
+st.write("ALL ENV KEYS:", sorted(list(os.environ.keys()))[:200])
+st.write("DEBUG PROJECT_ID =", os.getenv("GOOGLE_CLOUD_PROJECT"))
 # 读取 Railway Variables 里的服务账号 JSON
 creds = os.getenv("GOOGLE_CREDENTIALS")
 if creds:
