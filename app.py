@@ -12,21 +12,23 @@ if creds:
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
+st.write("DEBUG PROJECT_ID =", PROJECT_ID)
 
 # Claude on Vertex AI 官方文档示例使用区域端点。
 # 先别用 global，先用一个明确支持 Claude 的区域。
 REGION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-east5")
 
-MODEL_NAME = "claude-sonnet-4-6"
+MODEL_NAME = "claude-3-5-haiku"
 
 st.set_page_config(page_title="Claude AI Chat", page_icon="🤖")
 st.title("🤖 Claude AI Chat")
 st.caption("Railway + Vertex AI + Claude Sonnet 4.6")
 
-if not PROJECT_ID:
-    st.error("没有检测到 GOOGLE_CLOUD_PROJECT。")
-    st.stop()
 
+
+if not PROJECT_ID:
+    st.error("没有检测到 GOOGLE_CLOUD_PROJECT")
+    st.stop()
 try:
     client = AnthropicVertex(project_id=PROJECT_ID, region=REGION)
 except Exception as e:
