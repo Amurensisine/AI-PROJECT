@@ -38,7 +38,7 @@ except Exception as e:
     st.error(f"Vertex client init failed: {e}")
     st.stop()
 
-MODEL = "claude-haiku-4-5@20251001"
+MODEL = "claude-haiku-4-5"
 
 # API call with retry on 429
 def call_claude(messages, system_prompt, max_tokens, temperature, retries=3):
