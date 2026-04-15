@@ -41,7 +41,7 @@ if not PROJECT_ID:
 @st.cache_resource
 def init_vertex():
     vertexai.init(project=PROJECT_ID, location=REGION)
-    return GenerativeModel("gemini-1.5-flash-002")
+    return GenerativeModel("gemini-1.5-flash")
 
 try:
     model = init_vertex()
@@ -49,7 +49,7 @@ except Exception as e:
     st.error(f"Vertex AI init failed: {e}")
     st.stop()
 
-MODEL_NAME = "gemini-1.5-flash-002"
+MODEL_NAME = "gemini-1.5-flash"
 
 # ── Mode definitions ───────────────────────────────────────
 MODES = {
