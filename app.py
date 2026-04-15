@@ -3,7 +3,8 @@ import time
 import random
 import tempfile
 import streamlit as st
-from anthropic import AnthropicVertex
+import vertexai
+from vertexai.generative_models import GenerativeModel, ChatSession
 
 # ── Page config ────────────────────────────────────────────
 st.set_page_config(
@@ -17,19 +18,8 @@ st.markdown("""
 <style>
     .main { background-color: #f8f9fa; }
     .stChatMessage { border-radius: 12px; margin-bottom: 8px; }
-    .mode-badge {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 600;
-        margin-bottom: 8px;
-    }
     h1 { color: #1a1a2e; }
-    .stButton > button {
-        border-radius: 8px;
-        font-weight: 500;
-    }
+    .stButton > button { border-radius: 8px; font-weight: 500; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -42,34 +32,34 @@ if "GOOGLE_CREDENTIALS" in st.secrets:
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
 
 PROJECT_ID = st.secrets.get("GOOGLE_CLOUD_PROJECT", "")
-REGION = st.secrets.get("GOOGLE_CLOUD_LOCATION", "us-east5")
+REGION = st.secrets.get("GOOGLE_CLOUD_LOCATION", "us-central1")
 
 if not PROJECT_ID:
     st.error("GOOGLE_CLOUD_PROJECT not found in Secrets.")
     st.stop()
 
 @st.cache_resource
-def get_client():
-    return AnthropicVertex(project_id=PROJECT_ID, region=REGION)
+def init_vertex():
+    vertexai.init(project=PROJECT_ID, location=REGION)
+    return GenerativeModel("gemini-1.5-flash-002")
 
 try:
-    client = get_client()
+    model = init_vertex()
 except Exception as e:
-    st.error(f"Vertex client init failed: {e}")
+    st.error(f"Vertex AI init failed: {e}")
     st.stop()
 
-MODEL = "claude-haiku-4-5"
+MODEL_NAME = "gemini-1.5-flash-002"
 
 # ── Mode definitions ───────────────────────────────────────
 MODES = {
     "Mechanism Explorer": {
         "icon": "🔬",
-        "color": "#4361ee",
         "description": "Step-by-step reaction mechanisms",
         "system": """You are an expert organic chemistry teaching assistant specializing in named reactions.
 When a user asks about a named reaction, provide:
 1. A brief introduction (discoverer, year, significance)
-2. The general reaction scheme (use text-based notation, e.g. R-CHO + ... → ...)
+2. The general reaction scheme (use text-based notation, e.g. R-CHO + ... -> ...)
 3. Step-by-step mechanism with electron pushing described clearly
 4. Key conditions (reagents, solvents, temperature)
 5. Substrate scope and limitations
@@ -81,7 +71,6 @@ Always be precise with chemical terminology.""",
     },
     "Synthesis Advisor": {
         "icon": "🧪",
-        "color": "#7209b7",
         "description": "Which reaction to use for your synthesis",
         "system": """You are a synthetic organic chemistry expert assistant.
 Help the user with retrosynthetic analysis and forward synthesis planning using named reactions.
@@ -96,7 +85,6 @@ Think like a seasoned medicinal chemist. Be practical and concise.""",
     },
     "Quiz Mode": {
         "icon": "📝",
-        "color": "#f72585",
         "description": "Test your knowledge of named reactions",
         "system": """You are an organic chemistry professor conducting a quiz on named reactions.
 Your role:
@@ -111,7 +99,6 @@ Start by asking your first question immediately.""",
     },
     "Reaction Finder": {
         "icon": "🔍",
-        "color": "#06d6a0",
         "description": "Find reactions for a specific transformation",
         "system": """You are an expert in named reactions in organic chemistry.
 Help users find the right named reaction for their needs.
@@ -143,8 +130,6 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "mode" not in st.session_state:
     st.session_state.mode = "Mechanism Explorer"
-if "score" not in st.session_state:
-    st.session_state.score = 0
 
 # ── Sidebar ────────────────────────────────────────────────
 with st.sidebar:
@@ -177,7 +162,7 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.markdown(f"**Model:** `{MODEL}`")
+    st.markdown(f"**Model:** `{MODEL_NAME}`")
     st.markdown(f"**Region:** `{REGION}`")
 
 # ── Main area ──────────────────────────────────────────────
@@ -198,31 +183,31 @@ if not st.session_state.messages:
                 st.session_state.messages.append({"role": "user", "content": suggestions[i]})
                 st.rerun()
 
-# ── API call with retry ────────────────────────────────────
-def call_claude(messages, system_prompt, max_tokens, temperature, retries=3):
-    for attempt in range(retries):
-        try:
-            response = client.messages.create(
-                model=MODEL,
-                system=system_prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                messages=messages,
-            )
-            return "".join(
-                block.text for block in response.content
-                if getattr(block, "type", None) == "text"
-            ).strip() or "No response received."
-        except Exception as e:
-            err = str(e)
-            if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                if attempt < retries - 1:
-                    wait = 2 ** attempt
-                    st.warning(f"Rate limit hit, retrying in {wait}s ({attempt+1}/{retries})...")
-                    time.sleep(wait)
-                    continue
-                return "Rate limit exceeded (429). Please wait a moment and try again."
-            return f"Error: {e}"
+# ── API call ───────────────────────────────────────────────
+def call_gemini(messages, system_prompt, max_tokens, temperature):
+    try:
+        m = GenerativeModel(
+            MODEL_NAME,
+            system_instruction=system_prompt,
+            generation_config={
+                "max_output_tokens": max_tokens,
+                "temperature": temperature,
+            }
+        )
+        # Build history for multi-turn
+        history = []
+        for msg in messages[:-1]:
+            role = "user" if msg["role"] == "user" else "model"
+            history.append({"role": role, "parts": [msg["content"]]})
+
+        chat = m.start_chat(history=history)
+        response = chat.send_message(messages[-1]["content"])
+        return response.text
+    except Exception as e:
+        err = str(e)
+        if "429" in err or "quota" in err.lower():
+            return "Rate limit hit. Please wait a moment and try again."
+        return f"Error: {e}"
 
 # ── Chat display ───────────────────────────────────────────
 for message in st.session_state.messages:
@@ -232,7 +217,7 @@ for message in st.session_state.messages:
 # ── Chat input ─────────────────────────────────────────────
 placeholder = {
     "Mechanism Explorer": "Ask about any named reaction... e.g. 'Explain the Diels-Alder reaction'",
-    "Synthesis Advisor": "Describe your target transformation... e.g. 'How do I make an epoxide from an alkene?'",
+    "Synthesis Advisor": "Describe your target transformation...",
     "Quiz Mode": "Type your answer here...",
     "Reaction Finder": "What transformation do you need? e.g. 'aldehyde to alcohol'",
 }
@@ -246,12 +231,8 @@ if user_input:
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            raw = st.session_state.messages[-10:]
-            while raw and raw[0]["role"] != "user":
-                raw = raw[1:]
-            api_messages = [{"role": m["role"], "content": m["content"]} for m in raw]
-            reply = call_claude(
-                api_messages,
+            reply = call_gemini(
+                st.session_state.messages,
                 current_mode["system"],
                 max_tokens,
                 temperature,
