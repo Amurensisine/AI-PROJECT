@@ -129,6 +129,8 @@ with st.sidebar:
             if st.session_state.mode != mode_name:
                 st.session_state.mode = mode_name
                 st.session_state.messages = []
+                if mode_name == "Quiz Mode":
+                    st.session_state.pending_input = "Start the quiz now. Ask your first question."
                 st.rerun()
 
     st.divider()
