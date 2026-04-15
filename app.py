@@ -133,7 +133,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown("### Settings")
-    max_tokens = st.slider("Response length", 256, 2048, 1024, 128)
+    max_tokens = st.slider("Response length", 256, 8192, 4096, 256)
     temperature = st.slider("Creativity", 0.0, 1.0, 0.3, 0.1)
 
     st.divider()
