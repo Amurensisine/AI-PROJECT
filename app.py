@@ -106,6 +106,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "mode" not in st.session_state:
     st.session_state.mode = "Mechanism Explorer"
+if "pending_input" not in st.session_state:
+    st.session_state.pending_input = None
 
 # ── Sidebar ────────────────────────────────────────────────
 with st.sidebar:
@@ -147,14 +149,14 @@ st.markdown(f"# {current_mode['icon']} Named Reactions Assistant")
 st.markdown(f"**{st.session_state.mode}** — {current_mode['description']}")
 st.divider()
 
-if not st.session_state.messages:
+if not st.session_state.messages and st.session_state.pending_input is None:
     st.markdown("#### Try asking about:")
     cols = st.columns(3)
     suggestions = random.sample(RANDOM_PROMPTS, 3)
     for i, col in enumerate(cols):
         with col:
             if st.button(suggestions[i], use_container_width=True, key=f"suggest_{i}"):
-                st.session_state.messages.append({"role": "user", "content": suggestions[i]})
+                st.session_state.pending_input = suggestions[i]
                 st.rerun()
 
 # ── API call ───────────────────────────────────────────────
@@ -198,6 +200,11 @@ placeholder = {
 }
 
 user_input = st.chat_input(placeholder.get(st.session_state.mode, "Ask a question..."))
+
+# Handle suggestion button clicks
+if st.session_state.pending_input is not None:
+    user_input = st.session_state.pending_input
+    st.session_state.pending_input = None
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
