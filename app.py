@@ -1,6 +1,7 @@
 import random
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 # ── Page config ────────────────────────────────────────────
 st.set_page_config(
@@ -24,8 +25,8 @@ if not GEMINI_API_KEY:
     st.error("GEMINI_API_KEY not found in Secrets.")
     st.stop()
 
-genai.configure(api_key=GEMINI_API_KEY)
-MODEL_NAME = "gemini-1.5-flash"
+client = genai.Client(api_key=GEMINI_API_KEY)
+MODEL_NAME = "gemini-2.0-flash"
 
 # ── Mode definitions ───────────────────────────────────────
 MODES = {
@@ -159,21 +160,26 @@ if not st.session_state.messages:
 # ── API call ───────────────────────────────────────────────
 def call_gemini(messages, system_prompt, max_tokens, temperature):
     try:
-        m = genai.GenerativeModel(
-            MODEL_NAME,
-            system_instruction=system_prompt,
-            generation_config=genai.types.GenerationConfig(
+        history = []
+        for msg in messages[:-1]:
+            role = "user" if msg["role"] == "user" else "model"
+            history.append(types.Content(
+                role=role,
+                parts=[types.Part(text=msg["content"])]
+            ))
+
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=history + [types.Content(
+                role="user",
+                parts=[types.Part(text=messages[-1]["content"])]
+            )],
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
                 max_output_tokens=max_tokens,
                 temperature=temperature,
             )
         )
-        history = []
-        for msg in messages[:-1]:
-            role = "user" if msg["role"] == "user" else "model"
-            history.append({"role": role, "parts": [msg["content"]]})
-
-        chat = m.start_chat(history=history)
-        response = chat.send_message(messages[-1]["content"])
         return response.text
     except Exception as e:
         return f"Error: {e}"
