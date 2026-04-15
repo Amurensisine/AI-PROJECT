@@ -1,10 +1,6 @@
-import os
-import time
 import random
-import tempfile
 import streamlit as st
-import vertexai
-from vertexai.generative_models import GenerativeModel, ChatSession
+import google.generativeai as genai
 
 # ── Page config ────────────────────────────────────────────
 st.set_page_config(
@@ -13,7 +9,6 @@ st.set_page_config(
     layout="wide",
 )
 
-# ── Custom CSS ─────────────────────────────────────────────
 st.markdown("""
 <style>
     .main { background-color: #f8f9fa; }
@@ -23,32 +18,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── GCP credentials ────────────────────────────────────────
-if "GOOGLE_CREDENTIALS" in st.secrets:
-    creds = st.secrets["GOOGLE_CREDENTIALS"]
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
-    tmp.write(creds.encode("utf-8"))
-    tmp.close()
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
-
-PROJECT_ID = st.secrets.get("GOOGLE_CLOUD_PROJECT", "")
-REGION = st.secrets.get("GOOGLE_CLOUD_LOCATION", "us-central1")
-
-if not PROJECT_ID:
-    st.error("GOOGLE_CLOUD_PROJECT not found in Secrets.")
+# ── Gemini API setup ───────────────────────────────────────
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+if not GEMINI_API_KEY:
+    st.error("GEMINI_API_KEY not found in Secrets.")
     st.stop()
 
-@st.cache_resource
-def init_vertex():
-    vertexai.init(project=PROJECT_ID, location=REGION)
-    return GenerativeModel("gemini-1.5-flash")
-
-try:
-    model = init_vertex()
-except Exception as e:
-    st.error(f"Vertex AI init failed: {e}")
-    st.stop()
-
+genai.configure(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-1.5-flash"
 
 # ── Mode definitions ───────────────────────────────────────
@@ -66,7 +42,6 @@ When a user asks about a named reaction, provide:
 6. 1-2 representative synthetic examples
 
 Use clear, educational language suitable for undergraduate chemistry students.
-If the user asks follow-up questions, maintain context from the conversation.
 Always be precise with chemical terminology.""",
     },
     "Synthesis Advisor": {
@@ -163,7 +138,6 @@ with st.sidebar:
 
     st.divider()
     st.markdown(f"**Model:** `{MODEL_NAME}`")
-    st.markdown(f"**Region:** `{REGION}`")
 
 # ── Main area ──────────────────────────────────────────────
 current_mode = MODES[st.session_state.mode]
@@ -172,7 +146,6 @@ st.markdown(f"# {current_mode['icon']} Named Reactions Assistant")
 st.markdown(f"**{st.session_state.mode}** — {current_mode['description']}")
 st.divider()
 
-# Quick start buttons
 if not st.session_state.messages:
     st.markdown("#### Try asking about:")
     cols = st.columns(3)
@@ -186,15 +159,14 @@ if not st.session_state.messages:
 # ── API call ───────────────────────────────────────────────
 def call_gemini(messages, system_prompt, max_tokens, temperature):
     try:
-        m = GenerativeModel(
+        m = genai.GenerativeModel(
             MODEL_NAME,
             system_instruction=system_prompt,
-            generation_config={
-                "max_output_tokens": max_tokens,
-                "temperature": temperature,
-            }
+            generation_config=genai.types.GenerationConfig(
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+            )
         )
-        # Build history for multi-turn
         history = []
         for msg in messages[:-1]:
             role = "user" if msg["role"] == "user" else "model"
@@ -204,9 +176,6 @@ def call_gemini(messages, system_prompt, max_tokens, temperature):
         response = chat.send_message(messages[-1]["content"])
         return response.text
     except Exception as e:
-        err = str(e)
-        if "429" in err or "quota" in err.lower():
-            return "Rate limit hit. Please wait a moment and try again."
         return f"Error: {e}"
 
 # ── Chat display ───────────────────────────────────────────
