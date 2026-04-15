@@ -108,6 +108,8 @@ if "mode" not in st.session_state:
     st.session_state.mode = "Mechanism Explorer"
 if "pending_input" not in st.session_state:
     st.session_state.pending_input = None
+if "suggestions" not in st.session_state:
+    st.session_state.suggestions = random.sample(RANDOM_PROMPTS, 3)
 
 # ── Sidebar ────────────────────────────────────────────────
 with st.sidebar:
@@ -152,11 +154,12 @@ st.divider()
 if not st.session_state.messages and st.session_state.pending_input is None:
     st.markdown("#### Try asking about:")
     cols = st.columns(3)
-    suggestions = random.sample(RANDOM_PROMPTS, 3)
     for i, col in enumerate(cols):
         with col:
-            if st.button(suggestions[i], use_container_width=True, key=f"suggest_{i}"):
-                st.session_state.pending_input = suggestions[i]
+            suggestion = st.session_state.suggestions[i]
+            if st.button(suggestion, use_container_width=True, key=f"suggest_{i}"):
+                st.session_state.pending_input = suggestion
+                st.session_state.suggestions = random.sample(RANDOM_PROMPTS, 3)
                 st.rerun()
 
 # ── API call ───────────────────────────────────────────────
